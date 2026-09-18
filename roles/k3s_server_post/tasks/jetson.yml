@@ -1,0 +1,28 @@
+---
+- name: Create manifests directory for temp configuration
+  ansible.builtin.file:
+    path: /tmp/k3s
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  with_items: "{{ groups[group_name_master | default('master')] }}"
+  run_once: true
+
+- name: Copy NVIDIA device plugin manifest to first master
+  ansible.builtin.template:
+    src: nvidia-device-plugin.yaml.j2
+    dest: /tmp/k3s/nvidia-device-plugin.yaml
+    owner: "{{ ansible_user_id }}"
+    mode: "0755"
+  with_items: "{{ groups[group_name_master | default('master')] }}"
+  run_once: true
+
+- name: Apply NVIDIA device plugin manifest
+  ansible.builtin.command: >-
+    {{ k3s_kubectl_binary | default('k3s kubectl') }} apply -f /tmp/k3s/nvidia-device-plugin.yaml
+  register: apply_nvidia_dp
+  changed_when: false
+  run_once: true
+  until: apply_nvidia_dp.rc == 0
+  retries: 5
+  delay: 5

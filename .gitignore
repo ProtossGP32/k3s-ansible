@@ -4,3 +4,4 @@ ansible.cfg
 .ansible/
 kubeconfig
 zIgnore/
+.venv/

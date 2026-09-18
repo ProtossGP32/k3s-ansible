@@ -1,0 +1,11 @@
+---
+state: present
+jetson_power_mode: 0
+jetson_set_power_mode: true
+jetson_disable_nvzram: true
+jetson_enable_cgroups: true
+jetson_pcie_aspm_off: false
+jetson_configure_cdi: true
+jetson_default_runtime: false
+jetson_deploy_device_plugin: false
+jetson_label_node: true
