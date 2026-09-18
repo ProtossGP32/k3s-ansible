@@ -48,6 +48,8 @@
       become: true
     - role: raspberrypi
       become: true
+    - role: jetson
+      become: true
     - role: k3s_custom_registries
       become: true
       when: custom_registries

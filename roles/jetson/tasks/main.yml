@@ -1,0 +1,37 @@
+---
+- name: Test for Jetson /proc/device-tree/model
+  ansible.builtin.command: grep -Ei "Jetson|TEGRA" /proc/device-tree/model
+  register: grep_device_tree_model_jetson
+  failed_when: false
+  changed_when: false
+
+- name: Test for Jetson /proc/device-tree/compatible
+  ansible.builtin.command: grep -Ei "nvidia,tegra|nvidia,p3767" /proc/device-tree/compatible
+  register: grep_device_tree_compatible_jetson
+  failed_when: false
+  changed_when: false
+
+- name: Test for /etc/nv_tegra_release
+  ansible.builtin.stat:
+    path: /etc/nv_tegra_release
+  register: stat_nv_tegra_release
+
+- name: Set is_jetson fact to true
+  ansible.builtin.set_fact:
+    is_jetson: true
+  when: >-
+    (grep_device_tree_model_jetson.rc == 0) or
+    (grep_device_tree_compatible_jetson.rc == 0) or
+    (stat_nv_tegra_release.stat.exists | default(false))
+
+- name: Set is_jetson default fact to false
+  ansible.builtin.set_fact:
+    is_jetson: false
+  when: is_jetson is not defined
+
+- name: Execute OS related tasks on the Jetson - {{ action_ }}
+  ansible.builtin.include_tasks: "{{ action_ }}.yml"
+  vars:
+    action_: >-
+      {% if state == "present" %}setup{% else %}teardown{% endif %}
+  when: is_jetson | bool

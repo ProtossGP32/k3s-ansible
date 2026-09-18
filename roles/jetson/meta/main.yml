@@ -1,0 +1,46 @@
+---
+argument_specs:
+  main:
+    short_description: Adjust NVIDIA Jetson specific requisites
+    options:
+      state:
+        default: present
+        description:
+          - Indicates whether the k3s prerequisites for NVIDIA Jetson should be
+          - set up (possible values are `present` and `absent`)
+      jetson_power_mode:
+        default: 0
+        description:
+          - Power mode ID configured via nvpmodel (0 is 15W for Orin Nano, 1 is 7W)
+      jetson_set_power_mode:
+        default: true
+        description:
+          - Whether to enforce the power mode using nvpmodel
+      jetson_disable_nvzram:
+        default: true
+        description:
+          - Whether to disable nvzramconfig.service to ensure swap remains off
+      jetson_enable_cgroups:
+        default: true
+        description:
+          - Whether to enable memory and cpuset cgroups in /boot/extlinux/extlinux.conf
+      jetson_pcie_aspm_off:
+        default: false
+        description:
+          - Whether to append pcie_aspm=off in /boot/extlinux/extlinux.conf to fix NVMe AER/link drops
+      jetson_configure_cdi:
+        default: true
+        description:
+          - Whether to generate CDI specification via nvidia-ctk on JetPack 6
+      jetson_default_runtime:
+        default: false
+        description:
+          - Whether to configure nvidia as the default containerd runtime
+      jetson_deploy_device_plugin:
+        default: false
+        description:
+          - Whether to deploy a Tegra-compatible NVIDIA device plugin manifest on the control plane
+      jetson_label_node:
+        default: true
+        description:
+          - Whether to label the Jetson node with nvidia.com/gpu.present=true

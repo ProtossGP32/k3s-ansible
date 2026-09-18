@@ -1,0 +1,17 @@
+---
+- name: Remove CDI specification
+  ansible.builtin.file:
+    path: /etc/cdi/nvidia.yaml
+    state: absent
+
+- name: Check for nvzramconfig service existence
+  ansible.builtin.stat:
+    path: /etc/systemd/nvzramconfig.sh
+  register: nvzramconfig_stat
+
+- name: Re-enable nvzramconfig service
+  ansible.builtin.systemd:
+    name: nvzramconfig
+    enabled: true
+  when: nvzramconfig_stat.stat.exists
+  failed_when: false

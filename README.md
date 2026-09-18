@@ -30,6 +30,7 @@ install on machines running:
 - [x] Debian (tested on version 13)
 - [x] Ubuntu (tested on version 26.04 LTS)
 - [x] Rocky (tested on version 10)
+- [x] NVIDIA Jetson Orin Nano (JetPack 5 / JetPack 6, Ubuntu-based)
 
 Supported processor architectures are:
 
@@ -53,6 +54,42 @@ Supported processor architectures are:
 - Every node in the cluster must have a **unique hostname**. k3s registers each node keyed by its hostname, so
   two nodes with the same hostname cannot join the cluster. `site.yml` asserts this up front and fails fast if
   any duplicate is found.
+
+## ⚡ NVIDIA Jetson Orin Nano
+
+The `jetson` role detects Tegra hardware automatically (device tree + `/etc/nv_tegra_release`) and applies the
+L4T-specific setup required to run K3s on **Orin Nano (T234)** boards.
+
+### Pre-requisite: firmware
+
+Ansible cannot flash the on-module QSPI NOR bootloader. The board must already boot a working JetPack 5.x or 6.x
+installation (SD or NVMe) before running the playbook. If QSPI firmware and the JetPack version on NVMe disagree, the
+board will not boot — reflash QSPI with NVIDIA SDK Manager or `l4t_initrd_flash.sh` first.
+
+### Power and storage caveats
+
+- Use a **45 W or higher DC barrel jack** supply; low-wattage USB-C or 5 V supplies brown out and reset under load.
+- If the board drops to the UEFI Interactive Shell on cold boot, the NVMe initialized too slowly. Set NVMe as the
+  primary boot device and disable the network boot fallback in the UEFI boot manager.
+- Some NVMe drives trigger PCIe link-down / AER errors. Set `jetson_pcie_aspm_off: true` to append `pcie_aspm=off` to
+  the kernel command line (this reboots the node).
+
+### What the role does
+
+- Enables `memory` and `cpuset` cgroups in `/boot/extlinux/extlinux.conf` (required by K3s) and reboots when changed.
+- Disables `nvzramconfig.service` so swap stays off across reboots (JetPack regenerates zram swap on each boot).
+- Enforces a power profile via `nvpmodel` (`jetson_power_mode`, default `0` = 15 W; mode `1` = 7 W).
+- On JetPack 6, generates the NVIDIA CDI spec with `nvidia-ctk cdi generate --mode=csv`.
+- Labels the node `nvidia.com/gpu.present=true` and can make `nvidia` the default containerd runtime.
+
+### GPU workloads
+
+Tangible pods use the Tegra GPU via `runtimeClassName: nvidia` and/or `nvidia.com/gpu: 1`:
+
+- `jetson_default_runtime: true` makes `nvidia` the default runtime for all pods; keep `false` to opt in per pod.
+- `jetson_deploy_device_plugin: true` deploys a Tegra-compatible [NVIDIA device plugin](https://github.com/NVIDIA/k8s-device-plugin) DaemonSet through `k3s_server_post`.
+- NVIDIA GPU Operator / NFD cannot discover Tegra GPUs and is not supported; the device plugin relies on the node
+  label set by the role.
 
 ## 🚀 Getting Started
 
@@ -195,6 +232,16 @@ See the commands [here](https://technotim.com/posts/k3s-etcd-ansible/#testing-yo
 | Role(s) | Variable | Type | Default | Required | Description |
 |---|---|---|---|---|---|
 | `download` | `k3s_version` | string | ❌ | Required | K3s binaries version |
+| `jetson` | `state` | string | `present` | Not required | Indicates whether k3s prerequisites for NVIDIA Jetson should be set up (`present` or `absent`) |
+| `jetson` | `jetson_power_mode` | int | `0` | Not required | `nvpmodel` power mode ID (0 = 15W for Orin Nano, 1 = 7W) |
+| `jetson` | `jetson_set_power_mode` | bool | `true` | Not required | Enforce the power mode with `nvpmodel` |
+| `jetson` | `jetson_disable_nvzram` | bool | `true` | Not required | Disable `nvzramconfig.service` to keep swap off across reboots |
+| `jetson` | `jetson_enable_cgroups` | bool | `true` | Not required | Enable memory and cpuset cgroups in `/boot/extlinux/extlinux.conf` |
+| `jetson` | `jetson_pcie_aspm_off` | bool | `false` | Not required | Append `pcie_aspm=off` to the kernel command line to fix NVMe AER/link drops |
+| `jetson` | `jetson_configure_cdi` | bool | `true` | Not required | Generate `/etc/cdi/nvidia.yaml` with `nvidia-ctk --mode=csv` on JetPack 6 |
+| `jetson` | `jetson_default_runtime` | bool | `false` | Not required | Make `nvidia` the default containerd runtime |
+| `jetson` | `jetson_label_node` | bool | `true` | Not required | Add `--node-label nvidia.com/gpu.present=true` to k3s args |
+| `jetson`, `k3s_server_post` | `jetson_deploy_device_plugin` | bool | `false` | Not required | Deploy a Tegra-compatible NVIDIA device plugin DaemonSet to the cluster |
 | `k3s_agent`, `k3s_server`, `k3s_server_post` | `apiserver_endpoint` | string | ❌ | Required | Virtual ip-address configured on each master |
 | `k3s_agent` | `extra_agent_args` | string | `null` | Not required | Extra arguments for agents nodes |
 | `k3s_agent`, `k3s_server` | `group_name_master` | string | `null` | Not required | Name of the master group |

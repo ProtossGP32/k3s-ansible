@@ -1,0 +1,129 @@
+---
+- name: Check if /boot/extlinux/extlinux.conf exists
+  ansible.builtin.stat:
+    path: /boot/extlinux/extlinux.conf
+  register: extlinux_conf_stat
+
+- name: Enable cgroups via extlinux.conf APPEND line
+  ansible.builtin.replace:
+    path: /boot/extlinux/extlinux.conf
+    regexp: '^(\s*APPEND\b(?!.*\bcgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory\b)[^\n]*)'
+    replace: '\1 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory'
+  notify: reboot
+  when:
+    - jetson_enable_cgroups | bool
+    - extlinux_conf_stat.stat.exists
+
+- name: Disable PCIe ASPM via extlinux.conf APPEND line
+  ansible.builtin.replace:
+    path: /boot/extlinux/extlinux.conf
+    regexp: '^(\s*APPEND\b(?!.*\bpcie_aspm=off\b)[^\n]*)'
+    replace: '\1 pcie_aspm=off'
+  notify: reboot
+  when:
+    - jetson_pcie_aspm_off | bool
+    - extlinux_conf_stat.stat.exists
+
+- name: Check for nvzramconfig service existence
+  ansible.builtin.stat:
+    path: /etc/systemd/nvzramconfig.sh
+  register: nvzramconfig_stat
+
+- name: Disable and stop nvzramconfig service
+  ansible.builtin.systemd:
+    name: nvzramconfig
+    state: stopped
+    enabled: false
+  when:
+    - (disable_swap | default(true) | bool) or (jetson_disable_nvzram | default(true) | bool)
+    - nvzramconfig_stat.stat.exists
+  failed_when: false
+
+- name: Disable active zram swap devices
+  ansible.builtin.command: swapoff -a
+  changed_when: false
+  failed_when: false
+  when:
+    - (disable_swap | default(true) | bool) or (jetson_disable_nvzram | default(true) | bool)
+    - nvzramconfig_stat.stat.exists
+
+- name: Check if nvpmodel binary exists
+  ansible.builtin.stat:
+    path: /usr/sbin/nvpmodel
+  register: nvpmodel_stat
+
+- name: Check current nvpmodel status
+  ansible.builtin.slurp:
+    src: /var/lib/nvpmodel/status
+  register: nvpmodel_status_file
+  failed_when: false
+  when:
+    - jetson_set_power_mode | bool
+    - nvpmodel_stat.stat.exists
+
+- name: Set nvpmodel power mode to {{ jetson_power_mode }}
+  ansible.builtin.command: /usr/sbin/nvpmodel -m {{ jetson_power_mode }}
+  changed_when: true
+  when:
+    - jetson_set_power_mode | bool
+    - nvpmodel_stat.stat.exists
+    - >-
+      nvpmodel_status_file.content is not defined
+      or (nvpmodel_status_file.content | b64decode | trim)
+      != ('pmode:' ~ '%04d' | format(jetson_power_mode | int))
+
+- name: Check if nvidia-ctk is installed
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-ctk
+  register: nvidia_ctk_stat
+
+- name: Ensure /etc/cdi directory exists
+  ansible.builtin.file:
+    path: /etc/cdi
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when:
+    - jetson_configure_cdi | bool
+    - nvidia_ctk_stat.stat.exists
+
+- name: Generate CDI specification for Tegra
+  ansible.builtin.command:
+    cmd: /usr/bin/nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml --mode=csv
+    creates: /etc/cdi/nvidia.yaml
+  when:
+    - jetson_configure_cdi | bool
+    - nvidia_ctk_stat.stat.exists
+
+- name: Determine if Jetson node label should be added
+  ansible.builtin.set_fact:
+    _jetson_add_label: >-
+      {{ (jetson_label_node | default(true) | bool)
+      and ('--node-label nvidia.com/gpu.present=true' not in (extra_server_args | default('')))
+      and ('--node-label nvidia.com/gpu.present=true' not in (extra_agent_args | default(''))) }}
+
+- name: Determine if nvidia default runtime should be added
+  ansible.builtin.set_fact:
+    _jetson_add_default_runtime: >-
+      {{ (jetson_default_runtime | default(false) | bool)
+      and ('--default-runtime=nvidia' not in (extra_server_args | default('')))
+      and ('--default-runtime=nvidia' not in (extra_agent_args | default(''))) }}
+
+- name: Determine extra Jetson K3s arguments
+  ansible.builtin.set_fact:
+    _jetson_extra_k3s_args: >-
+      {%- set args = [] -%}
+      {%- if _jetson_add_label | bool -%}
+        {%- set _ = args.append('--node-label nvidia.com/gpu.present=true') -%}
+      {%- endif -%}
+      {%- if _jetson_add_default_runtime | bool -%}
+        {%- set _ = args.append('--default-runtime=nvidia') -%}
+      {%- endif -%}
+      {{ args | join(' ') }}
+
+- name: Append Jetson arguments to extra_server_args and extra_agent_args
+  ansible.builtin.set_fact:
+    extra_server_args: "{{ (extra_server_args | default('') ~ ' ' ~ _jetson_extra_k3s_args) | trim }}"
+    extra_agent_args: "{{ (extra_agent_args | default('') ~ ' ' ~ _jetson_extra_k3s_args) | trim }}"
+  when: _jetson_extra_k3s_args | trim | length > 0
