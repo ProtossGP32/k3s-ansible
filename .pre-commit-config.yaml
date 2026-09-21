@@ -23,10 +23,6 @@ repos:
         additional_dependencies: [ansible-core==2.18.0]
         language_version: python3.12
         args: [--offline]
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.9.0.6
-    hooks:
-      - id: shellcheck
   - repo: https://github.com/Lucas-C/pre-commit-hooks
     rev: v1.5.4
     hooks:
@@ -38,6 +34,12 @@ repos:
       - id: fix-smartquotes
   - repo: local
     hooks:
+      - id: shellcheck
+        name: shellcheck
+        entry: shellcheck
+        language: python
+        additional_dependencies: [shellcheck-py==0.11.0.1]
+        types: [shell]
       - id: cleanup-runner-resources-test
         name: cleanup runner resources test
         entry: .github/scripts/test-cleanup-runner-resources.sh
