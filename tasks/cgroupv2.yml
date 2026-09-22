@@ -1,0 +1,50 @@
+---
+- name: Ensure cgroup v2 configuration tasks run as root
+  become: true
+  block:
+    - name: Check if cgroup v2 is currently active
+      ansible.builtin.stat:
+        path: /sys/fs/cgroup/cgroup.controllers
+      register: cgroup_v2_check
+
+    - name: Configure cgroup v2 in GRUB defaults
+      ansible.builtin.lineinfile:
+        path: /etc/default/grub
+        regexp: '^(GRUB_CMDLINE_LINUX="(?:(?!systemd\.unified_cgroup_hierarchy=1).)*)"$'
+        line: '\1 systemd.unified_cgroup_hierarchy=1"'
+        backrefs: yes
+      when: not cgroup_v2_check.stat.exists
+      register: grub_config_updated
+
+    - name: Update GRUB configuration on Debian/Ubuntu systems
+      ansible.builtin.command: update-grub
+      when: 
+        - not cgroup_v2_check.stat.exists
+        - grub_config_updated.changed
+        - ansible_facts['os_family'] == 'Debian'
+
+    - name: Update GRUB configuration on RHEL/CentOS/Fedora systems
+      ansible.builtin.command: grub2-mkconfig -o /boot/grub2/grub.cfg
+      when: 
+        - not cgroup_v2_check.stat.exists
+        - grub_config_updated.changed
+        - ansible_facts['os_family'] == 'RedHat'
+
+    - name: Update GRUB configuration on SUSE systems
+      ansible.builtin.command: grub2-mkconfig -o /boot/grub2/grub.cfg
+      when: 
+        - not cgroup_v2_check.stat.exists
+        - grub_config_updated.changed
+        - ansible_facts['os_family'] == 'Suse'
+
+    - name: Reboot target host to apply cgroup v2 kernel parameters
+      ansible.builtin.reboot:
+        msg: "Rebooting host to enable cgroup v2 for K3s"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 15
+        test_command: uptime
+      when: 
+        - not cgroup_v2_check.stat.exists
+        - grub_config_updated.changed

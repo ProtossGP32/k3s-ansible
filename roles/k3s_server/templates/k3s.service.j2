@@ -5,6 +5,9 @@ After=network-online.target
 
 [Service]
 Type=notify
+{% if ansible_distribution == 'CentOS' and ansible_distribution_version == '8.1' %}
+Environment="INSTALL_K3S_SKIP_SELINUX_RPM=true"
+{% endif %}
 ExecStartPre=-/sbin/modprobe br_netfilter
 ExecStartPre=-/sbin/modprobe overlay
 ExecStart=/usr/local/bin/k3s server {{ extra_server_args | default("") }}

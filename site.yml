@@ -25,6 +25,9 @@
       run_once: true
       when: "'k3s_cluster' in groups"
 
+    - name: Ensure cgroup v2 is enabled on host
+      ansible.builtin.include_tasks: tasks/cgroupv2.yml
+
 - name: Prepare Proxmox cluster
   hosts: proxmox
   gather_facts: true

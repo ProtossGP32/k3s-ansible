@@ -1,0 +1,113 @@
+---
+- name: Automate Custom Python 3.12 Setup on CentOS 8.1
+  hosts: centos8_nodes
+  gather_facts: false
+  become: true
+
+  vars:
+    python_version: "3.12.0"
+    python_major_minor: "{{ python_version.split('.')[0] }}.{{ python_version.split('.')[1] }}"
+    python_bin_path: "/usr/local/bin/python{{ python_major_minor }}"
+    libselinux_version: "2.9"
+
+  tasks:
+    - name: Fix EOL CentOS 8 repository URLs to use vault.centos.org
+      ansible.builtin.raw: |
+        sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && \
+        sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-*
+      changed_when: false
+
+    # --- CHECK 1: Python 3.12 Binary ---
+    - name: Check if Python {{ python_major_minor }} is already installed
+      ansible.builtin.raw: "[ -f {{ python_bin_path }} ] && echo 'exists' || echo 'missing'"
+      register: python_check
+      changed_when: false
+
+    # --- CHECK 2: Native C-SELinux Bindings ---
+    - name: Check if native C-SELinux module is functional in custom Python
+      ansible.builtin.raw: "{{ python_bin_path }} -c 'import selinux; selinux.selinux_getpolicytype()' 2>/dev/null && echo 'installed' || echo 'missing'"
+      register: selinux_check
+      changed_when: false
+
+    # --- PYTHON 3.12 COMPILATION DEPENDENCIES ---
+    - name: Install build dependencies via dnf for Python 3.12
+      ansible.builtin.raw: |
+        dnf groupinstall -y 'Development Tools' && \
+        dnf install -y libffi-devel bzip2-devel openssl-devel zlib-devel sqlite-devel wget
+      when: "'missing' in python_check.stdout"
+
+    # --- PYTHON 3.12 COMPILATION TASKS ---
+    - name: Download and extract Python {{ python_version }} source
+      ansible.builtin.raw: |
+        cd /tmp && \
+        wget -q https://www.python.org/ftp/python/{{ python_version }}/Python-{{ python_version }}.tgz -O Python-{{ python_version }}.tgz && \
+        tar -xzf Python-{{ python_version }}.tgz
+      when: "'missing' in python_check.stdout"
+
+    - name: Compile and install Python {{ python_version }}
+      ansible.builtin.raw: |
+        cd /tmp/Python-{{ python_version }} && \
+        ./configure --enable-optimizations && \
+        make -j$(nproc) && \
+        make altinstall
+      when: "'missing' in python_check.stdout"
+
+    # --- NATIVE LIBSELINUX DEPENDENCIES & BUILD ---
+    - name: Ensure C-compilation dependencies and base policy packages exist
+      ansible.builtin.raw: "dnf install -y pcre-devel pcre2-devel swig gcc libselinux-devel selinux-policy-targeted"
+      when: "'missing' in selinux_check.stdout"
+
+    - name: Remove non-working PyPI selinux module if present
+      ansible.builtin.raw: "{{ python_bin_path }} -m pip uninstall -y selinux"
+      failed_when: false
+      when: "'missing' in selinux_check.stdout"
+
+    - name: Build and install native SELinux C-bindings for Python {{ python_major_minor }}
+      ansible.builtin.raw: |
+        rm -rf /tmp/libselinux* && \
+        cd /tmp && \
+        wget -q https://github.com/SELinuxProject/selinux/releases/download/20190315/libselinux-{{ libselinux_version }}.tar.gz -O libselinux.tar.gz && \
+        tar -xzf libselinux.tar.gz && \
+        cd libselinux-{{ libselinux_version }}/src && \
+        bash -e exception.sh > selinuxswig_python_exception.i && \
+        swig -Wall -python -o selinuxswig_wrap.c -outdir ./ selinuxswig_python.i && \
+        gcc -shared -fPIC -I../include -I/usr/local/include/python{{ python_major_minor }} selinuxswig_wrap.c -o _selinux.so -lselinux && \
+        SITE_DIR=$({{ python_bin_path }} -c "import site; print(site.getsitepackages()[0])") && \
+        mkdir -p $SITE_DIR/selinux && \
+        cp _selinux.so $SITE_DIR/ && \
+        cp _selinux.so $SITE_DIR/selinux/ && \
+        cp selinux.py $SITE_DIR/selinux/__init__.py && \
+        cp selinux.py $SITE_DIR/selinux.py
+      when: "'missing' in selinux_check.stdout"
+
+    # --- ENSURE KERNEL MODULES EXTRA (UNCONDITIONAL) ---
+    - name: Ensure kernel-modules-extra matches the active kernel version
+      ansible.builtin.raw: |
+        KVER=$(uname -r)
+        dnf install -y "kernel-modules-extra-${KVER}"
+      changed_when: false
+
+    # --- ENFORCE SELINUX CONFIG FILE ---
+    - name: Ensure /etc/selinux/config exists for Ansible SELinux module
+      ansible.builtin.raw: |
+        if [ ! -f /etc/selinux/config ]; then
+          mkdir -p /etc/selinux
+          echo -e "SELINUX=enforcing\nSELINUXTYPE=targeted" > /etc/selinux/config
+        fi
+      changed_when: false
+
+    # --- ENFORCE PERMISSIONS ---
+    - name: Enforce correct system read and execute permissions on SELinux python bindings
+      ansible.builtin.raw: |
+        SITE_DIR=$({{ python_bin_path }} -c "import site; print(site.getsitepackages()[0])")
+        if [ -d "$SITE_DIR" ]; then
+          chmod -R 755 $SITE_DIR/selinux 2>/dev/null || true
+          chmod 755 $SITE_DIR/_selinux.so 2>/dev/null || true
+          chmod 644 $SITE_DIR/selinux.py 2>/dev/null || true
+        fi
+      changed_when: false
+
+    # --- CLEANUP ---
+    - name: Clean up temporary files
+      ansible.builtin.raw: "rm -rf /tmp/Python-{{ python_version }}* /tmp/libselinux*"
+      when: "'missing' in python_check.stdout or 'missing' in selinux_check.stdout"

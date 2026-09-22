@@ -145,6 +145,8 @@
     owner: root
     group: root
     mode: "0644"
+  notify:
+    - restart k3s
 
 - name: Enable and check K3s service
   ansible.builtin.systemd:
@@ -181,30 +183,125 @@
     path: /var/lib/rancher/k3s/server
     mode: "{{ p.stat.mode }}"
 
-- name: Create directory .kube
-  ansible.builtin.file:
-    path: "{{ ansible_user_dir }}/.kube"
-    state: directory
-    owner: "{{ ansible_user_id }}"
-    mode: u=rwx,g=rx,o=
+#- name: Create directory .kube
+#  ansible.builtin.file:
+#    path: "{{ ansible_user_dir }}/.kube"
+#    state: directory
+#    owner: "{{ ansible_user_id }}"
+#    mode: u=rwx,g=rx,o=
+#  become: true
 
-- name: Copy config file to user home directory
-  ansible.builtin.copy:
-    src: /etc/rancher/k3s/k3s.yaml
-    dest: "{{ ansible_user_dir }}/.kube/config"
-    remote_src: true
-    owner: "{{ ansible_user_id }}"
-    mode: u=rw,g=,o=
+# -------------------------------------------------------------------
+# Task Block: Standard for Modern OSes / Unprivileged for Legacy CentOS 8.1
+# -------------------------------------------------------------------
+- name: Ensure .kube directory exists
+  block:
+    # --- Modern OSes (Debian, Rocky, RHEL 9+) ---
+    - name: Create directory .kube
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.kube"
+        state: directory
+        owner: "{{ ansible_facts['user_id'] }}"
+        mode: '0750'
+      when: not (ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '=='))
 
-- name: Configure kubectl cluster to {{ endpoint_url }}
-  ansible.builtin.command: >-
-    {{ k3s_kubectl_binary | default('k3s kubectl') }} config set-cluster default
-      --server={{ endpoint_url }}
-      --kubeconfig {{ ansible_user_dir }}/.kube/config
-  changed_when: true
-  vars:
-    endpoint_url: >-
-      https://{{ apiserver_endpoint | ansible.utils.ipwrap }}:6443
+    # --- Legacy CentOS 8.1 (Handles NFS root_squash & local users without become) ---
+    - name: Create directory .kube (CentOS 8.1 legacy fallback)
+      ansible.builtin.file:
+        path: "{{ ansible_facts['user_dir'] }}/.kube"
+        state: directory
+        mode: '0750'
+      become: false
+      when: ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '==')
+
+#- name: Copy config file to user home directory
+#  ansible.builtin.copy:
+#    src: /etc/rancher/k3s/k3s.yaml
+#    dest: "{{ ansible_user_dir }}/.kube/config"
+#    remote_src: true
+#    owner: "{{ ansible_user_id }}"
+#    mode: u=rw,g=,o=
+
+- name: Copy kubeconfig to user home directory
+  block:
+    # --- Modern OSes ---
+    - name: Copy config file to user home directory
+      ansible.builtin.copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: "{{ ansible_facts['user_dir'] }}/.kube/config"
+        remote_src: true
+        owner: "{{ ansible_facts['user_id'] }}"
+      when: not (ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '=='))
+
+    # --- Legacy CentOS 8.1 (Staged copy via /tmp to bypass root_squash) ---
+    - name: Stage k3s.yaml in /tmp (CentOS 8.1 legacy fallback)
+      ansible.builtin.copy:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /tmp/k3s_temp.yaml
+        remote_src: true
+        mode: '0644'
+      become: true
+      when: ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '==')
+
+    - name: Move staged config to .kube directory (CentOS 8.1 legacy fallback)
+      ansible.builtin.copy:
+        src: /tmp/k3s_temp.yaml
+        dest: "{{ ansible_facts['user_dir'] }}/.kube/config"
+        remote_src: true
+        mode: '0600'
+      become: false
+      when: ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '==')
+
+    - name: Remove staged temporary config file (CentOS 8.1 legacy fallback)
+      ansible.builtin.file:
+        path: /tmp/k3s_temp.yaml
+        state: absent
+      become: true
+      when: ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '==')
+
+
+#- name: Configure kubectl cluster to {{ endpoint_url }}
+#  ansible.builtin.command: >-
+#    {{ k3s_kubectl_binary | default('k3s kubectl') }} config set-cluster default
+#      --server={{ endpoint_url }}
+#      --kubeconfig {{ ansible_user_dir }}/.kube/config
+#  changed_when: true
+#  vars:
+#    endpoint_url: >-
+#      https://{{ external_tls_san | default(apiserver_endpoint | default(ansible.utils.ipwrap)) }}:{{ external_tls_port | default('6443') }}
+#     https://{{ apiserver_endpoint | ansible.utils.ipwrap }}:6443
+
+- name: Configure kubectl cluster endpoint
+  block:
+    # -------------------------------------------------------------------
+    # Task A: Standard task for modern OSes (Debian, Rocky, RHEL 9+)
+    # -------------------------------------------------------------------
+    - name: Configure kubectl cluster to {{ endpoint_url }}
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} config set-cluster default
+          --server={{ endpoint_url }}
+          --kubeconfig {{ ansible_facts['user_dir'] | default(ansible_user_dir) }}/.kube/config
+      changed_when: true
+      vars:
+        endpoint_url: >-
+          https://{{ external_tls_san | default(apiserver_endpoint | default(ansible.utils.ipwrap)) }}:{{ external_tls_port | default('6443') }}
+      when: not (ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '=='))
+
+    # -------------------------------------------------------------------
+    # Task B: Legacy fallback task for CentOS 8.1 nodes (unprivileged)
+    # -------------------------------------------------------------------
+    - name: Configure kubectl cluster to {{ endpoint_url }} (CentOS 8.1 legacy fallback)
+      ansible.builtin.command: >-
+        {{ k3s_kubectl_binary | default('k3s kubectl') }} config set-cluster default
+          --server={{ endpoint_url }}
+          --kubeconfig {{ ansible_facts['user_dir'] | default(ansible_user_dir) }}/.kube/config
+      become: false
+      changed_when: true
+      vars:
+        endpoint_url: >-
+          https://{{ external_tls_san | default(apiserver_endpoint | default(ansible.utils.ipwrap)) }}:{{ external_tls_port | default('6443') }}
+      when: ansible_facts['distribution'] == 'CentOS' and ansible_facts['distribution_version'] is version('8.1', '==')
+
 # Deactivated linter rules:
 #   - jinja[invalid]: As of version 6.6.0, ansible-lint complains that the input to ipwrap
 #                     would be undefined. This will not be the case during playbook execution.
