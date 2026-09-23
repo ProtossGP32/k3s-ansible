@@ -38,6 +38,18 @@
   hosts: k3s_cluster
   gather_facts: true
   environment: "{{ proxy_env | default({}) }}"
+  pre_tasks:
+    - name: Read device tree model from remote host
+      ansible.builtin.command: cat /proc/device-tree/model
+      register: remote_device_model
+      changed_when: false
+      failed_when: false
+
+    - name: Detect hardware platform
+      ansible.builtin.set_fact:
+        is_raspberry_pi: "{{ 'Raspberry Pi' in (remote_device_model.stdout | default('')) }}"
+        is_jetson: "{{ 'NVIDIA' in (remote_device_model.stdout | default('')) or 'Jetson' in (remote_device_model.stdout | default('')) }}"
+
   roles:
     - role: lxc
       become: true
@@ -48,8 +60,10 @@
       become: true
     - role: raspberrypi
       become: true
+      when: is_raspberry_pi | default(false) | bool
     - role: jetson
       become: true
+      when: is_jetson | default(false) | bool
     - role: k3s_custom_registries
       become: true
       when: custom_registries
