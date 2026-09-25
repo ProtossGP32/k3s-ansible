@@ -96,12 +96,38 @@
     - jetson_configure_cdi | bool
     - nvidia_ctk_stat.stat.exists
 
+- name: Check if nvidia-container-runtime was installed
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-container-runtime
+  register: nvidia_container_runtime_stat
+  when: jetson_default_runtime | bool
+
+- name: Assert nvidia-container-runtime is present for the nvidia default runtime
+  ansible.builtin.assert:
+    that: nvidia_container_runtime_stat.stat.exists
+    fail_msg: >-
+      jetson_default_runtime is true but /usr/bin/nvidia-container-runtime is
+      missing. Install the NVIDIA Container Toolkit (included in JetPack 6) or
+      set jetson_default_runtime to false.
+  when: jetson_default_runtime | bool
+
+- name: Determine default GPU advertisement for this node
+  ansible.builtin.set_fact:
+    _jetson_gpu_advertise_default: >-
+      {{
+      ('node' in group_names
+      and (group_name_master | default('master')) not in group_names)
+      or (groups['k3s_cluster'] | default([]) | length == 1)
+      }}
+
 - name: Determine if Jetson node label should be added
   ansible.builtin.set_fact:
     _jetson_add_label: >-
-      {{ (jetson_label_node | default(true) | bool)
+      {{
+      (jetson_label_node | default(_jetson_gpu_advertise_default) | bool)
       and ('--node-label nvidia.com/gpu.present=true' not in (extra_server_args | default('')))
-      and ('--node-label nvidia.com/gpu.present=true' not in (extra_agent_args | default(''))) }}
+      and ('--node-label nvidia.com/gpu.present=true' not in (extra_agent_args | default('')))
+      }}
 
 - name: Determine if nvidia default runtime should be added
   ansible.builtin.set_fact:

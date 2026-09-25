@@ -37,10 +37,12 @@ argument_specs:
         description:
           - Whether to configure nvidia as the default containerd runtime
       jetson_deploy_device_plugin:
-        default: false
-        description:
-          - Whether to deploy a Tegra-compatible NVIDIA device plugin manifest on the control plane
-      jetson_label_node:
         default: true
         description:
-          - Whether to label the Jetson node with nvidia.com/gpu.present=true
+          - Whether to deploy a Tegra-compatible NVIDIA device plugin DaemonSet
+            when the cluster contains a Jetson node
+      jetson_label_node:
+        description:
+          - Whether to label the Jetson node with nvidia.com/gpu.present=true.
+            Defaults to worker (node group) boards and single-node clusters;
+            override per host to opt in or out.

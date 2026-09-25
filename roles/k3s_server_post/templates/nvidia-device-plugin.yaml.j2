@@ -17,6 +17,9 @@ spec:
         - key: nvidia.com/gpu
           operator: Exists
           effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
       nodeSelector:
         nvidia.com/gpu.present: "true"
       containers:
@@ -34,4 +37,3 @@ spec:
         - name: device-plugin
           hostPath:
             path: /var/lib/kubelet/device-plugins
-

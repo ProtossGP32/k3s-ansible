@@ -22,7 +22,15 @@
 - name: Deploy NVIDIA device plugin for Jetson
   ansible.builtin.include_tasks: jetson.yml
   tags: jetson
-  when: jetson_deploy_device_plugin | default(false) | bool
+  when:
+    - jetson_deploy_device_plugin | default(false) | bool
+    - >-
+      ('k3s_cluster' in groups)
+      and (groups['k3s_cluster']
+      | map('extract', hostvars, 'is_jetson')
+      | map('default', false)
+      | select
+      | list | length) > 0
 
 - name: Remove tmp directory used for manifests
   ansible.builtin.file:

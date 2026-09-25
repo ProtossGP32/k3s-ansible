@@ -7,5 +7,4 @@ jetson_enable_cgroups: true
 jetson_pcie_aspm_off: false
 jetson_configure_cdi: true
 jetson_default_runtime: false
-jetson_deploy_device_plugin: false
-jetson_label_node: true
+jetson_deploy_device_plugin: true
