@@ -5,7 +5,6 @@
     state: directory
     owner: "{{ ansible_user_id }}"
     mode: "0755"
-  with_items: "{{ groups[group_name_master | default('master')] }}"
   run_once: true
 
 - name: Copy NVIDIA device plugin manifest to first master
@@ -14,7 +13,6 @@
     dest: /tmp/k3s/nvidia-device-plugin.yaml
     owner: "{{ ansible_user_id }}"
     mode: "0755"
-  with_items: "{{ groups[group_name_master | default('master')] }}"
   run_once: true
 
 - name: Apply NVIDIA device plugin manifest

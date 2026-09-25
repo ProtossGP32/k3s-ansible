@@ -209,15 +209,17 @@ custom_registries_yaml: |
 # custom_reboot_command: /usr/sbin/shutdown -r now
 
 # NVIDIA Jetson Orin / Tegra configuration
-# Automatically detected and configured if nodes are NVIDIA Jetson boards.
+# Automatically detected and configured if nodes are NVIDIA Jetson boards (JetPack 6 / L4T R36 required).
 # jetson_power_mode: 0           # 0 = 15W mode for Orin Nano, 1 = 7W mode
 # jetson_set_power_mode: true    # Enforce power mode via nvpmodel
 # jetson_disable_nvzram: true    # Disable nvzramconfig.service to keep swap off across reboots
 # jetson_enable_cgroups: true    # Enable memory and cpuset cgroups in extlinux.conf
 # jetson_pcie_aspm_off: false    # Set to true if experiencing NVMe PCIe link-down or AER errors
 # jetson_configure_cdi: true     # Generate /etc/cdi/nvidia.yaml with --mode=csv on JetPack 6
-# jetson_default_runtime: false  # Set to true to make nvidia the default containerd runtime
-# jetson_deploy_device_plugin: false # Set to true to deploy Tegra-compatible nvidia-device-plugin
+# jetson_default_runtime: false    # Make nvidia the default runtime (requires nvidia-container-runtime)
+# jetson_deploy_device_plugin: true # Deploy the Tegra-compatible device plugin when the cluster contains a Jetson node
+# jetson_label_node:               # Optional override for the --node-label nvidia.com/gpu.present=true default
+#                                  # Default: worker and single-node boards, false on masters
 
 # Only enable and configure these if you access the internet through a proxy
 # proxy_env:

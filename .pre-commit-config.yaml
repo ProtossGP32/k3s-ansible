@@ -157,3 +157,27 @@ repos:
           - PyYAML
         pass_filenames: false
         files: ^molecule/resources/verify_from_outside/tasks/test/deploy-example\.yml$|^\.github/scripts/test-verify-nginx-assert\.py$ # noqa yaml[line-length]
+      - id: jetson-gpu-label-test
+        name: Jetson GPU label test
+        entry: python3 .github/scripts/test-jetson-gpu-label.py
+        language: python
+        additional_dependencies:
+          - Jinja2>=3.1
+          - PyYAML
+        pass_filenames: false
+        files: ^roles/jetson/tasks/setup\.yml$|^roles/jetson/defaults/main\.yml$|^\.github/scripts/test-jetson-gpu-label\.py$ # noqa yaml[line-length]
+      - id: jetson-device-plugin-test
+        name: Jetson device plugin test
+        entry: python3 .github/scripts/test-jetson-device-plugin.py
+        language: python
+        additional_dependencies:
+          - Jinja2>=3.1
+          - PyYAML
+        pass_filenames: false
+        files: ^roles/k3s_server_post/tasks/(main|jetson)\.yml$|^roles/k3s_server_post/templates/nvidia-device-plugin\.yaml\.j2$|^\.github/scripts/test-jetson-device-plugin\.py$ # noqa yaml[line-length]
+      - id: jetson-detection-test
+        name: Jetson role wiring test
+        entry: .github/scripts/test-jetson-detection.sh
+        language: system
+        pass_filenames: false
+        files: ^site\.yml$|^reset\.yml$|^roles/jetson/(tasks|handlers|defaults)/.*\.yml$|^roles/k3s_server_post/tasks/(main|jetson)\.yml$|^\.github/scripts/test-jetson-detection\.sh$ # noqa yaml[line-length]
