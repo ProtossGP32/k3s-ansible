@@ -76,6 +76,46 @@ grep -Eq -- '^jetson_label_node:' "$jetson_defaults" && {
   exit 1
 }
 
+# The NVIDIA Container Toolkit must be role-installed on every Jetson board.
+grep -Eq -- '^jetson_install_container_toolkit: true' "$jetson_defaults" || {
+  printf 'jetson defaults do not install the NVIDIA Container Toolkit\n' >&2
+  exit 1
+}
+grep -Fq -- 'jetson_install_container_toolkit' "$jetson_setup" || {
+  printf 'jetson setup lost the container toolkit install wiring\n' >&2
+  exit 1
+}
+grep -Eq -- "toolkit/{{ ansible_facts\['os_family'\] }}\.yml" "$jetson_setup" || {
+  printf 'jetson setup does not dispatch the toolkit install by OS family\n' >&2
+  exit 1
+}
+grep -Eq -- 'when: jetson_default_runtime' "$jetson_setup" && {
+  printf 'jetson setup still gates a stat/assert on jetson_default_runtime\n' >&2
+  exit 1
+}
+
+# The official per-OS toolkit install files must exist and match the guide.
+for file in Debian RedHat default; do
+  if [ ! -f "$repo_root/roles/jetson/tasks/toolkit/$file.yml" ]; then
+    printf 'missing roles/jetson/tasks/toolkit/%s.yml\n' "$file" >&2
+    exit 1
+  fi
+done
+grep -Fq -- 'nvidia-container-toolkit' "$repo_root/roles/jetson/tasks/toolkit/Debian.yml" || {
+  printf 'Debian toolkit install lost the apt packages\n' >&2
+  exit 1
+}
+grep -Fq -- 'nvidia-container-toolkit' "$repo_root/roles/jetson/tasks/toolkit/RedHat.yml" || {
+  printf 'RedHat toolkit install lost the dnf packages\n' >&2
+  exit 1
+}
+
+# Resetting the cluster must not uninstall the system-level toolkit packages.
+grep -Fq -- 'nvidia-container' "$repo_root/roles/jetson/tasks/teardown.yml" && {
+  printf 'jetson teardown unexpectedly uninstalls the NVIDIA container toolkit\n' >&2
+  exit 1
+}
+
 # The role reboot handler must survive slow NVMe-origin reboots.
 grep -Fq -- 'reboot_timeout: 3600' "$jetson_handlers" || {
   printf 'jetson reboot handler lacks reboot_timeout: 3600\n' >&2

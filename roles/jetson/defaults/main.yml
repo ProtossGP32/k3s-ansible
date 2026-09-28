@@ -8,3 +8,4 @@ jetson_pcie_aspm_off: false
 jetson_configure_cdi: true
 jetson_default_runtime: false
 jetson_deploy_device_plugin: true
+jetson_install_container_toolkit: true

@@ -41,6 +41,11 @@ argument_specs:
         description:
           - Whether to deploy a Tegra-compatible NVIDIA device plugin DaemonSet
             when the cluster contains a Jetson node
+      jetson_install_container_toolkit:
+        default: true
+        description:
+          - Whether to install the NVIDIA Container Toolkit from the official
+            NVIDIA repository (apt on Ubuntu/Debian, dnf on Rocky)
       jetson_label_node:
         description:
           - Whether to label the Jetson node with nvidia.com/gpu.present=true.

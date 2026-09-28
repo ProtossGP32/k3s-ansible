@@ -77,6 +77,42 @@
     path: /usr/bin/nvidia-ctk
   register: nvidia_ctk_stat
 
+- name: Check if nvidia-container-runtime is installed
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-container-runtime
+  register: nvidia_container_runtime_stat
+
+- name: Install NVIDIA container toolkit from the official repository
+  ansible.builtin.include_tasks: "{{ item }}"
+  with_first_found:
+    - "toolkit/{{ ansible_facts['os_family'] }}.yml"
+    - "toolkit/default.yml"
+  when:
+    - jetson_install_container_toolkit | bool
+    - not (nvidia_ctk_stat.stat.exists and nvidia_container_runtime_stat.stat.exists)
+
+- name: Re-check if nvidia-ctk is installed after toolkit installation
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-ctk
+  register: nvidia_ctk_stat
+
+- name: Re-check if nvidia-container-runtime is installed after toolkit installation
+  ansible.builtin.stat:
+    path: /usr/bin/nvidia-container-runtime
+  register: nvidia_container_runtime_stat
+
+- name: Assert NVIDIA container toolkit is installed
+  ansible.builtin.assert:
+    that:
+      - nvidia_ctk_stat.stat.exists | bool
+      - nvidia_container_runtime_stat.stat.exists | bool
+    fail_msg: >-
+      jetson_install_container_toolkit is enabled but /usr/bin/nvidia-ctk or
+      /usr/bin/nvidia-container-runtime is missing. Verify the NVIDIA repository
+      was configured correctly, that nvidia.github.io is reachable (see
+      proxy_env), or set jetson_install_container_toolkit to false.
+  when: jetson_install_container_toolkit | bool
+
 - name: Ensure /etc/cdi directory exists
   ansible.builtin.file:
     path: /etc/cdi
@@ -95,21 +131,6 @@
   when:
     - jetson_configure_cdi | bool
     - nvidia_ctk_stat.stat.exists
-
-- name: Check if nvidia-container-runtime was installed
-  ansible.builtin.stat:
-    path: /usr/bin/nvidia-container-runtime
-  register: nvidia_container_runtime_stat
-  when: jetson_default_runtime | bool
-
-- name: Assert nvidia-container-runtime is present for the nvidia default runtime
-  ansible.builtin.assert:
-    that: nvidia_container_runtime_stat.stat.exists
-    fail_msg: >-
-      jetson_default_runtime is true but /usr/bin/nvidia-container-runtime is
-      missing. Install the NVIDIA Container Toolkit (included in JetPack 6) or
-      set jetson_default_runtime to false.
-  when: jetson_default_runtime | bool
 
 - name: Determine default GPU advertisement for this node
   ansible.builtin.set_fact:

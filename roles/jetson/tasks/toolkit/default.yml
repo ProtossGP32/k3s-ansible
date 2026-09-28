@@ -1,0 +1,8 @@
+---
+- name: Fail on an unsupported operating system
+  ansible.builtin.fail:
+    msg: >-
+      jetson_install_container_toolkit is enabled but the NVIDIA Container
+      Toolkit cannot be installed on this operating system. The official
+      installer supports Ubuntu and Debian via apt and Rocky Linux via dnf.
+      Set jetson_install_container_toolkit to false to skip installation.

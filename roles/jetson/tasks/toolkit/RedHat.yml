@@ -1,0 +1,17 @@
+---
+- name: Configure the NVIDIA container toolkit dnf repository
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+    dest: /etc/yum.repos.d/nvidia-container-toolkit.repo
+    mode: "0644"
+
+- name: Install NVIDIA container toolkit
+  ansible.builtin.dnf:
+    name:
+      - curl
+      - libnvidia-container-tools
+      - libnvidia-container1
+      - nvidia-container-toolkit
+      - nvidia-container-toolkit-base
+    state: present
+    update_cache: true

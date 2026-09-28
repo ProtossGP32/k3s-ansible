@@ -30,7 +30,7 @@ install on machines running:
 - [x] Debian (tested on version 13)
 - [x] Ubuntu (tested on version 26.04 LTS)
 - [x] Rocky (tested on version 10)
-- [x] NVIDIA Jetson Orin Nano (JetPack 5 / JetPack 6, Ubuntu-based)
+- [x] NVIDIA Jetson Orin Nano (JetPack 6, Ubuntu-based)
 
 Supported processor architectures are:
 
@@ -81,6 +81,9 @@ for GPU workloads: it lacks `nvidia-ctk`, so the CDI and device plugin path is u
 - Disables `nvzramconfig.service` so swap stays off across reboots (JetPack regenerates zram swap on each boot).
 - Enforces a power profile via `nvpmodel` (`jetson_power_mode`, default `0` = 15 W; mode `1` = 7 W).
 - On JetPack 6 (L4T R36), generates the NVIDIA CDI spec with `nvidia-ctk cdi generate --mode=csv`.
+- Installs the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/) from the
+  official NVIDIA repository on any supported OS (apt on Ubuntu/Debian, dnf on Rocky Linux), providing `nvidia-ctk`
+  and `nvidia-container-runtime` on every Jetson board.
 - Advertises `nvidia.com/gpu.present=true` by default on worker (`node` group) boards and on the sole board of a
   single-node cluster; masters in multi-node clusters stay unlabeled unless `jetson_label_node: true` is set for
   them. Can also make `nvidia` the default containerd runtime.
@@ -97,7 +100,9 @@ Pods use the Tegra GPU via `runtimeClassName: nvidia` and/or `nvidia.com/gpu: 1`
 - `jetson_label_node` overrides the role-aware advertising default on a per-host basis (for example `false` on a
   worker that will not run GPU workloads, or `true` on a GPU-bound master).
 - `jetson_default_runtime: true` makes `nvidia` the default runtime for all pods; keep `false` to opt in per pod.
-  Setting it requires the NVIDIA Container Toolkit (`nvidia-container-runtime`) to be installed, or the play fails.
+  The role installs the NVIDIA Container Toolkit (via `jetson_install_container_toolkit`, default `true`) on every
+  JetPack 6 board regardless of this setting, so pods can request the GPU per pod with `runtimeClassName: nvidia`
+  and/or `nvidia.com/gpu: 1`.
 - NVIDIA GPU Operator / NFD cannot discover Tegra GPUs and is not supported; the device plugin relies on the node
   label set by the role.
 
@@ -250,6 +255,7 @@ See the commands [here](https://technotim.com/posts/k3s-etcd-ansible/#testing-yo
 | `jetson` | `jetson_pcie_aspm_off` | bool | `false` | Not required | Append `pcie_aspm=off` to the kernel command line to fix NVMe AER/link drops |
 | `jetson` | `jetson_configure_cdi` | bool | `true` | Not required | Generate `/etc/cdi/nvidia.yaml` with `nvidia-ctk --mode=csv` on JetPack 6 |
 | `jetson` | `jetson_default_runtime` | bool | `false` | Not required | Make `nvidia` the default containerd runtime |
+| `jetson` | `jetson_install_container_toolkit` | bool | `true` | Not required | Install the NVIDIA Container Toolkit from the official NVIDIA repository (apt on Ubuntu/Debian, dnf on Rocky Linux) |
 | `jetson` | `jetson_label_node` | bool | `(role)` | Not required | Add `--node-label nvidia.com/gpu.present=true`; defaults to worker and single-node boards, override per host |
 | `jetson`, `k3s_server_post` | `jetson_deploy_device_plugin` | bool | `true` | Not required | Deploy a Tegra-compatible NVIDIA device plugin DaemonSet when the cluster contains a Jetson node |
 | `k3s_agent`, `k3s_server`, `k3s_server_post` | `apiserver_endpoint` | string | ❌ | Required | Virtual ip-address configured on each master |

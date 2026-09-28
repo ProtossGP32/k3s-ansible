@@ -218,6 +218,7 @@ custom_registries_yaml: |
 # jetson_configure_cdi: true     # Generate /etc/cdi/nvidia.yaml with --mode=csv on JetPack 6
 # jetson_default_runtime: false    # Make nvidia the default runtime (requires nvidia-container-runtime)
 # jetson_deploy_device_plugin: true # Deploy the Tegra-compatible device plugin when the cluster contains a Jetson node
+# jetson_install_container_toolkit: true # Install the NVIDIA Container Toolkit from the official NVIDIA repository
 # jetson_label_node:               # Optional override for the --node-label nvidia.com/gpu.present=true default
 #                                  # Default: worker and single-node boards, false on masters
 

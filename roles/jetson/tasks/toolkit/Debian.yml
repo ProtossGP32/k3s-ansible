@@ -1,0 +1,33 @@
+---
+- name: Install prerequisites for the NVIDIA repository
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg2
+    state: present
+
+- name: Download NVIDIA container toolkit signing key
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/gpgkey
+    dest: /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    mode: "0644"
+
+- name: Configure the NVIDIA container toolkit apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    mode: "0644"
+    content: >-
+      deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg]
+      https://nvidia.github.io/libnvidia-container/stable/deb/$(ARCH) /
+
+- name: Install NVIDIA container toolkit
+  ansible.builtin.apt:
+    name:
+      - libnvidia-container-tools
+      - libnvidia-container1
+      - nvidia-container-toolkit
+      - nvidia-container-toolkit-base
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
