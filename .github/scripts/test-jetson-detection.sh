@@ -36,6 +36,42 @@ grep -Fq -- 'Set is_jetson fact to true' "$jetson_main" || {
   exit 1
 }
 
+# Both device-tree probes decide is_jetson from their return code. The command
+# module never executes under --check: it returns rc 0 with "Command would have
+# run if not in check mode". Without check_mode: false on both probes every host
+# looks like a Jetson in a check run, so the distro specific setup and teardown
+# tasks would be applied to hosts that must not be touched.
+probe_count="$(grep -c -- 'check_mode: false' "$jetson_main" || true)"
+if [ "$probe_count" -lt 2 ]; then
+  printf 'jetson detection probes must set check_mode: false (found %s, expected 2)\n' \
+    "$probe_count" >&2
+  exit 1
+fi
+
+# The probes must stay registered under the names the gate consumes.
+for var in grep_device_tree_model_jetson grep_device_tree_compatible_jetson; do
+  grep -Fq -- "register: $var" "$jetson_main" || {
+    printf 'detection probe is not registered as %s\n' "$var" >&2
+    exit 1
+  }
+done
+
+# The gate must key on rc 0 and must tolerate a missing rc so an undefined
+# result cannot be read as "this host is a Jetson". The when is a folded block
+# scalar, so each probe is matched on its own line.
+grep -Eq -- 'grep_device_tree_model_jetson\.rc \| default\(1\)\) == 0' "$jetson_main" || {
+  printf 'is_jetson gate does not default the device-tree model probe rc\n' >&2
+  exit 1
+}
+grep -Eq -- 'grep_device_tree_compatible_jetson\.rc \| default\(1\)\) == 0' "$jetson_main" || {
+  printf 'is_jetson gate does not default the device-tree compatible probe rc\n' >&2
+  exit 1
+}
+grep -Fq -- 'stat_nv_tegra_release.stat.exists | default(false)' "$jetson_main" || {
+  printf 'is_jetson gate no longer honours the /etc/nv_tegra_release probe\n' >&2
+  exit 1
+}
+
 # site.yml must not gate the roles behind the removed pre-tasks facts.
 grep -Eq -- 'when:.*is_(jetson|raspberry_pi)' "$site_yml" && {
   printf 'site.yml still gates a role behind the removed detection facts\n' >&2
